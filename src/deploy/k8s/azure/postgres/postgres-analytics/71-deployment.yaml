@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-analytics
+  namespace: redirect-application
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres-analytics
+  template:
+    metadata:
+      labels:
+        app: postgres-analytics
+        tier: db
+    spec:
+      nodeSelector:
+        workload: db
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  tier: db
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          args:
+            - -c
+            - max_connections=100
+            - -c
+            - shared_buffers=256MB
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: analytics
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: analytics-service-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: analytics-service-secret
+                  key: DB_PASS
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "analyticsuser", "-d", "analytics"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              memory: "2Gi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pgdata-analytics

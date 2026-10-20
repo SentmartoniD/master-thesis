@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: redirect-application
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1
+          ports:
+            - name: metrics
+              containerPort: 9187
+          env:
+            # Split URI/USER/PASS so the credentials still come from the Secret
+            # instead of being inlined into a DSN string.
+            - name: DATA_SOURCE_URI
+              value: "postgres-urlshortener:5432/urlshortener?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              valueFrom:
+                secretKeyRef: { name: urlshortener-db-credentials, key: DB_USER }
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef: { name: urlshortener-db-credentials, key: DB_PASS }
+          resources:
+            requests: { cpu: "50m", memory: "32Mi" }
+            limits:   { memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter
+  namespace: redirect-application
+spec:
+  selector:
+    app: postgres-exporter
+  ports:
+    - port: 9187
+      targetPort: metrics

@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-urlshortener
+  namespace: redirect-application
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres-urlshortener
+  template:
+    metadata:
+      labels:
+        app: postgres-urlshortener
+        tier: db
+    spec:
+      nodeSelector:
+        workload: db
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  tier: db
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          args:
+            - -c
+            - max_connections=200
+            - -c
+            - shared_buffers=1GB
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: urlshortener
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: urlshortener-service-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: urlshortener-service-secret
+                  key: DB_PASS
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "appuser", "-d", "urlshortener"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              memory: "12Gi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pgdata-urlshortener

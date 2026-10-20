@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-config
+  namespace: redirect-application
+data:
+  DB_HOST: "postgres-analytics"
+  DB_NAME: "analytics"
+  DB_MAX_CONNS: "10"
+  DB_MIN_CONNS: "10"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  RABBITMQ_EXCHANGE: "clicks"
+  RABBITMQ_QUEUE: "clicks.analytics"
+  RABBITMQ_ROUTING_KEY: "click.recorded"
+  CONSUMER_PREFETCH: "1000"
+  BATCH_SIZE: "500"
+  FLUSH_INTERVAL: "1s"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: analytics-migrate
+  namespace: redirect-application
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: analytics-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/migrate"]
+          envFrom:
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: analytics-config }
+            # The other server, so the other Secret. Easy one to miss here.
+            - secretRef:    { name: analytics-db-credentials }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: redirect-application
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-service
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: analytics-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: admin
+              containerPort: 9090
+          envFrom:
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: analytics-config }
+            - secretRef:    { name: analytics-db-credentials }
+          startupProbe:
+            httpGet: { path: /readyz, port: admin }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: admin }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: admin }
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: "200m", memory: "128Mi" }
+            limits:   { memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: redirect-application
+spec:
+  selector:
+    app: analytics-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+    - name: admin
+      port: 9090
+      targetPort: admin

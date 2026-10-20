@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: urlshortener-service
+  namespace: redirect-application
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: urlshortener-service
+  template:
+    metadata:
+      labels:
+        app: urlshortener-service
+        tier: support
+    spec:
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        workload: support
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  tier: support
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: api
+          image: mscthesisacr.azurecr.io/urlshortener-service:v1
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: admin
+              containerPort: 9090
+          envFrom:
+            - configMapRef: { name: urlshortener-service-config }
+            - secretRef:    { name: urlshortener-service-secret }
+          startupProbe:
+            httpGet: { path: /readyz, port: admin }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /livez, port: admin }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: admin }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "64Mi"
+            limits:
+              memory: "256Mi"

@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: redirect-application
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+
+    scrape_configs:
+      # Prometheus' own health: scrape failures, TSDB size, target up/down.
+      # 30s is plenty for meta-monitoring and keeps the series count down.
+      - job_name: prometheus
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # every pod of the three services, on port 9090
+      - job_name: services
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [redirect-application]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: (urlshortener|redirect|analytics)-service
+          - source_labels: [__meta_kubernetes_pod_ip]
+            regex: (.+)
+            target_label: __address__
+            replacement: $1:9090
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: job
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      - job_name: rabbitmq
+        static_configs:
+          - targets: ['rabbitmq:15692']
+
+      # per-container CPU and memory.
+      # 10s matches the kubelet's own cAdvisor housekeeping interval: faster
+      # would store duplicate values and dominate TSDB growth (~20k samples
+      # per scrape across the node pool), slower leaves too few samples for
+      # rate() to compute over a measurement window. At 30s a 45s window held
+      # only 1-2 samples and rate() returned nothing.
+      - job_name: cadvisor
+        scrape_interval: 10s
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __metrics_path__
+            replacement: /metrics/cadvisor

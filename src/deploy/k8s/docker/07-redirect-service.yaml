@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redirect-config
+  namespace: redirect-application
+data:
+  DB_HOST: "postgres-urlshortener"
+  DB_NAME: "urlshortener"
+  DB_MAX_CONNS: "10"
+  DB_MIN_CONNS: "10"
+  CLICK_MODE: "async"
+  CLICK_BUFFER_SIZE: "4096"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  RABBITMQ_EXCHANGE: "clicks"
+  RABBITMQ_ROUTING_KEY: "click.recorded"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redirect-service
+  namespace: redirect-application
+spec:
+  # The RQ1 variable. This is the number you sweep.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redirect-service
+  template:
+    metadata:
+      labels:
+        app: redirect-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: redirect-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: admin
+              containerPort: 9090
+          envFrom:
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: redirect-config }
+            - secretRef:    { name: urlshortener-db-credentials }
+          startupProbe:
+            httpGet: { path: /readyz, port: admin }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: admin }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: admin }
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: "200m", memory: "64Mi" }
+            limits:   { memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redirect-service
+  namespace: redirect-application
+spec:
+  selector:
+    app: redirect-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+    - name: admin
+      port: 9090
+      targetPort: admin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redirect-service
+  namespace: redirect-application
+spec:
+  type: NodePort
+  selector:
+    app: redirect-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      nodePort: 30080
+    - name: admin
+      port: 9090
+      targetPort: admin

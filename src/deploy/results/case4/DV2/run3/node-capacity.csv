@@ -1,0 +1,16 @@
+﻿node,workload,instance_type,capacity_cpu,allocatable_cpu,allocatable_mem
+aks-apppool-21070774-vmss000000,app,Standard_D2s_v5,2,1900m,5927352Ki
+aks-apppool-21070774-vmss000001,app,Standard_D2s_v5,2,1900m,5927352Ki
+aks-apppool-21070774-vmss000002,app,Standard_D2s_v5,2,1900m,5931576Ki
+aks-apppool-21070774-vmss000003,app,Standard_D2s_v5,2,1900m,5927348Ki
+aks-apppool-21070774-vmss000004,app,Standard_D2s_v5,2,1900m,5927352Ki
+aks-apppool-21070774-vmss000005,app,Standard_D2s_v5,2,1900m,5931632Ki
+aks-apppool-21070774-vmss000006,app,Standard_D2s_v5,2,1900m,5927352Ki
+aks-apppool-21070774-vmss000007,app,Standard_D2s_v5,2,1900m,5931576Ki
+aks-dbpool-17214721-vmss000000,db,Standard_D4s_v5,4,3860m,12074748Ki
+aks-dbpool-17214721-vmss000001,db,Standard_D4s_v5,4,3860m,12074748Ki
+aks-loadgenpool-36156120-vmss000000,loadgen,Standard_D8s_v5,8,7820m,27591176Ki
+aks-supportpool-17167509-vmss000000,support,Standard_D2s_v5,2,1900m,5927352Ki
+aks-supportpool-17167509-vmss000001,support,Standard_D2s_v5,2,1900m,5927352Ki
+aks-supportpool-17167509-vmss000002,support,Standard_D2s_v5,2,1900m,5931580Ki
+aks-system-12720941-vmss00000f,system,Standard_D4s_v5,4,3860m,12074748Ki

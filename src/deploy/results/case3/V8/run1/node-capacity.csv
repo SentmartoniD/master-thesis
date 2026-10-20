@@ -1,0 +1,3 @@
+﻿node,instance_type,capacity_cpu,allocatable_cpu,allocatable_mem
+aks-apppool-71877464-vmss000000,Standard_D4s_v5,4,3860m,12074748Ki
+aks-apppool-71877464-vmss000001,Standard_D4s_v5,4,3860m,12078980Ki

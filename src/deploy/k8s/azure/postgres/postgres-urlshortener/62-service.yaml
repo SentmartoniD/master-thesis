@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-urlshortener
+  namespace: redirect-application
+spec:
+  selector:
+    app: postgres-urlshortener
+  ports:
+    - port: 5432
+      targetPort: postgres

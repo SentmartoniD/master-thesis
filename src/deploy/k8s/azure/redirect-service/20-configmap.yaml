@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redirect-service-config
+  namespace: redirect-application
+data:
+  # HTTP
+  SERVER_PORT: "8000"
+  ADMIN_PORT: "9090"
+  SERVER_WRITE_TIMEOUT: "30s"
+  SERVER_IDLE_TIMEOUT: "120s"
+
+  # database
+  DB_HOST: "postgres-urlshortener"
+  DB_PORT: "5432"
+  DB_NAME: "urlshortener"
+  DB_SSLMODE: "disable"
+  DB_MAX_CONNS: "2"
+  DB_MIN_CONNS: "2"
+  DB_MAX_CONN_LIFETIME: "30m"
+  DB_MAX_CONN_IDLE_TIME: "5m"
+  DB_CONNECT_TIMEOUT: "5s"
+
+  # RabbitMQ
+  CLICK_MODE: "async"
+  CLICK_BUFFER_SIZE: "4096"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  RABBITMQ_EXCHANGE: "clicks"
+  RABBITMQ_ROUTING_KEY: "click.recorded"
+
+  # logging
+  LOG_FORMAT: "json"
+  LOG_LEVEL: "info"

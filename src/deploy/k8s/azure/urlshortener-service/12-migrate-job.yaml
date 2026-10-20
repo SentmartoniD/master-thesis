@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: urlshortener-service-migrate
+  namespace: redirect-application
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: mscthesisacr.azurecr.io/urlshortener-service:v1
+          imagePullPolicy: Always
+          command: ["/app/migrate"]
+          envFrom:
+            - configMapRef: { name: urlshortener-service-config }
+            - secretRef:    { name: urlshortener-service-secret }

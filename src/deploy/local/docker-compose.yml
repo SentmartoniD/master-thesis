@@ -1,0 +1,198 @@
+configs:
+  init-analytics-db:
+    content: |
+      CREATE DATABASE analytics;
+
+  prometheus-config:
+    content: |
+      global:
+        scrape_interval: 5s
+
+      scrape_configs:
+        - job_name: redirect-service
+          static_configs:
+            - targets: ["redirect-service:9090"]
+
+        - job_name: urlshortener-service
+          static_configs:
+            - targets: ["urlshortener-service:9090"]
+
+        - job_name: analytics-service
+          static_configs:
+            - targets: ["analytics-service:9090"]
+
+        - job_name: postgres
+          static_configs:
+            - targets: ["postgres-exporter:9187"]
+
+        - job_name: rabbitmq
+          static_configs:
+            - targets: ["rabbitmq:15692"]
+
+  grafana-datasource:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus:9090
+          isDefault: true
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: urlshortener
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    configs:
+      - source: init-analytics-db
+        target: /docker-entrypoint-initdb.d/init-analytics-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d urlshortener"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  shorten-migrate:
+    build: ../../services/urlshortener-service
+    entrypoint: ["/app/migrate"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB_HOST: postgres
+      DB_USER: appuser
+      DB_PASS: devpassword
+      DB_NAME: urlshortener
+      DB_SSLMODE: disable
+      LOG_FORMAT: console
+
+  analytics-migrate:
+    build: ../../services/analytics-service
+    entrypoint: ["/app/migrate"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB_HOST: postgres
+      DB_USER: appuser
+      DB_PASS: devpassword
+      DB_NAME: analytics
+      DB_SSLMODE: disable
+      LOG_FORMAT: console
+
+  urlshortener-service:
+    build: ../../services/urlshortener-service
+    depends_on:
+      shorten-migrate: { condition: service_completed_successfully }
+    ports:
+      - "8001:8000"
+      - "9091:9090"
+    environment:
+      DB_HOST: postgres
+      DB_USER: appuser
+      DB_PASS: devpassword
+      DB_NAME: urlshortener
+      DB_SSLMODE: disable
+      SHORT_BASE_URL: http://localhost:8000
+      LOG_FORMAT: console
+      LOG_LEVEL: debug
+
+  redirect-service:
+    build: ../../services/redirect-service
+    depends_on:
+      shorten-migrate: { condition: service_completed_successfully }
+      rabbitmq:        { condition: service_healthy }
+    ports:
+      - "8000:8000"
+      - "9090:9090"
+    environment:
+      DB_HOST: postgres
+      DB_USER: appuser
+      DB_PASS: devpassword
+      DB_NAME: urlshortener
+      DB_SSLMODE: disable
+      CLICK_MODE: async
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_FORMAT: console
+      LOG_LEVEL: debug
+
+  analytics-service:
+    build: ../../services/analytics-service
+    depends_on:
+      analytics-migrate: { condition: service_completed_successfully }
+      rabbitmq:          { condition: service_healthy }
+    ports:
+      - "8002:8000"
+      - "9092:9090"
+    environment:
+      DB_HOST: postgres
+      DB_USER: appuser
+      DB_PASS: devpassword
+      DB_NAME: analytics
+      DB_SSLMODE: disable
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_FORMAT: console
+      LOG_LEVEL: debug
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: "postgresql://appuser:devpassword@postgres:5432/urlshortener?sslmode=disable"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-remote-write-receiver
+    ports:
+      - "9000:9090"
+    configs:
+      - source: prometheus-config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - promdata:/prometheus
+    depends_on:
+      - redirect-service
+      - urlshortener-service
+      - analytics-service
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    configs:
+      - source: grafana-datasource
+        target: /etc/grafana/provisioning/datasources/datasource.yml
+    volumes:
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  promdata:
+  grafanadata:

@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: analytics-service-migrate
+  namespace: redirect-application
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: mscthesisacr.azurecr.io/analytics-service:v1
+          imagePullPolicy: Always
+          command: ["/app/migrate"]
+          envFrom:
+            - configMapRef: { name: analytics-service-config }
+            - secretRef:    { name: analytics-service-secret }
